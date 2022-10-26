@@ -78,12 +78,14 @@ class GoogleSignInHelper {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     await googleSignIn!.signOut();
+    _onSignedChangeController.sink.add(false);
   }
 
   static Future<void> disconnect() async {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     await googleSignIn!.disconnect();
+    _onSignedChangeController.sink.add(false);
   }
 
   static Future<void> _doIfSignedIn() async {
