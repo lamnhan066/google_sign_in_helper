@@ -1,0 +1,30 @@
+name: google_sign_in_helper
+description: A new Flutter plugin project.
+version: 0.0.1
+homepage:
+
+environment:
+  sdk: '>=2.18.2 <3.0.0'
+  flutter: ">=2.5.0"
+
+dependencies:
+  firebase_core: ^2.1.0
+  flutter:
+    sdk: flutter
+  
+  google_sign_in: ^5.0.4
+  google_sign_in_dartio:
+    git: https://github.com/helpisdev/google_sign_in_dart
+  http: ^0.13.5
+  universal_platform: ^1.0.0+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
