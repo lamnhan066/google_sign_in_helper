@@ -58,14 +58,14 @@ class GoogleUser {
 
   factory GoogleUser.fromMap(Map<String, dynamic> map) {
     return GoogleUser(
-      sub: map['sub'] as String,
-      name: map['name'] as String,
-      givenName: map['given_name'] as String,
-      familyName: map['family_name'] as String,
-      picture: map['picture'] as String,
-      email: map['email'] as String,
-      emailVerified: map['email_verified'] as bool,
-      locale: map['locale'] as String,
+      sub: map['sub'] as String? ?? '',
+      name: map['name'] as String? ?? '',
+      givenName: map['given_name'] as String? ?? '',
+      familyName: map['family_name'] as String? ?? '',
+      picture: map['picture'] as String? ?? '',
+      email: map['email'] as String? ?? '',
+      emailVerified: map['email_verified'] as bool? ?? false,
+      locale: map['locale'] as String? ?? '',
     );
   }
 
