@@ -1,10 +1,10 @@
 name: google_sign_in_helper
-description: A new Flutter plugin project.
+description: Make it easier for you to use google sign in on all platforms.
 version: 0.0.1
 homepage:
 
 environment:
-  sdk: '>=2.18.2 <3.0.0'
+  sdk: '>=2.17.0 <3.0.0'
   flutter: ">=2.5.0"
 
 dependencies:

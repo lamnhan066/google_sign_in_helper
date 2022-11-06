@@ -9,17 +9,32 @@ import 'google_auth_client.dart';
 import 'google_user.dart';
 
 class GoogleSignInHelper {
-  static GoogleSignIn? googleSignIn;
+  static final instance = GoogleSignInHelper._();
 
-  static Map<String, String> headers = {};
-  static late GoogleSignInAuthentication authInfo;
-  static late GoogleUser user;
-  static late GoogleAuthClient client;
+  GoogleSignInHelper._();
 
-  static Stream<bool> get onSignChanged => _onSignedChangeController.stream;
-  static final StreamController<bool> _onSignedChangeController =
+  /// Get GoogleSignIn instance
+  GoogleSignIn? googleSignIn;
+
+  /// Get headers from the google sign in
+  Map<String, String> headers = {};
+
+  /// Get [GoogleSignInAuthentication] information
+  GoogleSignInAuthentication? authInfo;
+
+  /// Get [GoogleUser] information
+  GoogleUser? user;
+
+  /// Get [GoogleAuthClient]
+  GoogleAuthClient? client;
+
+  /// Change when user sign in or sign out
+  Stream<bool> get onSignChanged => _onSignedChangeController.stream;
+  final StreamController<bool> _onSignedChangeController =
       StreamController.broadcast();
-  static bool get isSigned => googleSignIn?.currentUser != null;
+
+  /// Get current signed in state
+  bool get isSigned => googleSignIn?.currentUser != null;
 
   static const _driveAppdataScope =
       'https://www.googleapis.com/auth/drive.appdata';
@@ -27,10 +42,10 @@ class GoogleSignInHelper {
   /// Initialize this plugin in main():
   /// ``` dart
   /// void main() async {
-  ///     await GoogleSignInHelper.initialize(currentPlatform: DefaultFirebaseOptions.currentPlatform);
+  ///     GoogleSignInHelper.instance.initialize(currentPlatform: DefaultFirebaseOptions.currentPlatform);
   /// }
   /// ```
-  static Future<void> initialize({
+  void initialize({
     required FirebaseOptions currentPlatform,
     List<String> scopes = const [_driveAppdataScope, 'profile', 'email'],
     String? desktopId,
@@ -52,7 +67,8 @@ class GoogleSignInHelper {
     }
   }
 
-  static Future<bool> signIn() async {
+  /// Sign in
+  Future<bool> signIn() async {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     final result = await googleSignIn!.signIn();
@@ -63,7 +79,8 @@ class GoogleSignInHelper {
     return result != null;
   }
 
-  static Future<bool> signInSilently() async {
+  /// Sign in silently
+  Future<bool> signInSilently() async {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     final result = await googleSignIn!.signInSilently();
@@ -74,32 +91,46 @@ class GoogleSignInHelper {
     return result != null;
   }
 
-  static Future<void> signOut() async {
+  /// Sign out
+  Future<void> signOut() async {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     await googleSignIn!.signOut();
+    _doIfSignOut();
     _onSignedChangeController.sink.add(false);
   }
 
-  static Future<void> disconnect() async {
+  /// Disconnect
+  Future<void> disconnect() async {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     await googleSignIn!.disconnect();
+    _doIfSignOut();
     _onSignedChangeController.sink.add(false);
   }
 
-  static Future<void> _doIfSignedIn() async {
+  Future<void> _doIfSignedIn() async {
     assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
 
     headers = await googleSignIn!.currentUser!.authHeaders;
     authInfo = await googleSignIn!.currentUser!.authentication;
 
     client = GoogleAuthClient(headers);
-    user = await getUserInfo();
+    user = await _getUserInfo();
   }
 
-  static Future getUserInfo() async {
-    final response = await client
+  void _doIfSignOut() async {
+    googleSignIn = null;
+    headers = {};
+    authInfo = null;
+    client = null;
+    user = null;
+  }
+
+  Future<GoogleUser?> _getUserInfo() async {
+    if (client == null) return null;
+
+    final response = await client!
         .get(Uri.parse('https://www.googleapis.com/oauth2/v3/userinfo'));
 
     return GoogleUser.fromJson(response.body);

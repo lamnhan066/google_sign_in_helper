@@ -1,18 +1,74 @@
-# google_sign_in_helper
+# Google Sign In Helper
 
-A new Flutter plugin project.
+Make it easier for you to use google sign in on all platforms.
 
-## Getting Started
+## Usage
 
-This project is a starting point for a Flutter
-[plug-in package](https://flutter.dev/developing-packages/),
-a specialized package that includes platform-specific implementation code for
-Android and/or iOS.
+**Configure the plguin:**
 
-For help getting started with Flutter development, view the
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Mobile: https://pub.dev/packages/google_sign_in
+- Desktop: https://pub.dev/packages/google_sign_in_dartio
 
-The plugin project was generated without specifying the `--platforms` flag, no platforms are currently supported.
-To add platforms, run `flutter create -t plugin --platforms <platforms> .` in this directory.
-You can also find a detailed instruction on how to add platforms in the `pubspec.yaml` at https://flutter.dev/docs/development/packages-and-plugins/developing-packages#plugin-platforms.
+**Initialize the plugin:**
+
+``` dart
+final googleSignInHelper = GoogleSignInHelper.instance;
+
+void main() async {
+     googleSignInHelper.initialize(
+        currentPlatform: DefaultFirebaseOptions.currentPlatform,
+        
+        // Add desktop id to this if you're using desktop
+        desktopId: null,
+     );
+ }
+```
+
+**Sign in:**
+
+``` dart
+bool result = await googleSignInHelper.signIn();
+```
+
+**Sign in silently:**
+
+``` dart
+bool result = await googleSignInHelper.signInSilently();
+```
+
+**Sign out:**
+
+``` dart
+await googleSignInHelper.signOut();
+```
+
+**Disconnect:**
+
+``` dart
+await googleSignInHelper.disconnect();
+```
+
+**Values that you can get after signed in:**
+
+``` dart
+/// Get [GoogleSignIn] instance
+GoogleSignIn? googleSignInHelper.googleSignIn;
+
+/// Get headers from the google sign in
+Map<String, String> googleSignInHelper.headers;
+
+/// Get [GoogleSignInAuthentication] information
+GoogleSignInAuthentication? googleSignInHelper.authInfo;
+
+/// Get [GoogleUser] information
+GoogleUser? googleSignInHelper.user;
+
+/// Get [GoogleAuthClient]
+GoogleAuthClient? googleSignInHelper.client;
+
+/// Change when user sign in or sign out
+Stream<bool> googleSignInHelper.onSignChanged;
+
+/// Get current signed in state
+bool googleSignInHelper.isSigned;
+```
