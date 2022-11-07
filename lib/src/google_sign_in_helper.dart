@@ -8,11 +8,13 @@ import 'package:universal_platform/universal_platform.dart';
 import 'google_auth_client.dart';
 import 'google_user.dart';
 
+class GoogleSignInScope {
+  static const appData = 'drive.appdata';
+  static const profile = 'userinfo.profile';
+  static const email = 'userinfo.email';
+}
+
 class GoogleSignInHelper {
-  static final instance = GoogleSignInHelper._();
-
-  GoogleSignInHelper._();
-
   /// Get GoogleSignIn instance
   GoogleSignIn? googleSignIn;
 
@@ -36,9 +38,6 @@ class GoogleSignInHelper {
   /// Get current signed in state
   bool get isSigned => googleSignIn?.currentUser != null;
 
-  static const _driveAppdataScope =
-      'https://www.googleapis.com/auth/drive.appdata';
-
   /// Initialize this plugin in main():
   /// ``` dart
   /// void main() async {
@@ -46,10 +45,13 @@ class GoogleSignInHelper {
   /// }
   /// ```
   ///
-  /// Default scopes are: drive.appdata, profile, email
+  /// Default scopes are: profile, email
   void initialize({
     required FirebaseOptions currentPlatform,
-    List<String> scopes = const [_driveAppdataScope, 'profile', 'email'],
+    List<String> scopes = const [
+      GoogleSignInScope.profile,
+      GoogleSignInScope.email,
+    ],
     String? desktopId,
   }) async {
     if (UniversalPlatform.isDesktop && desktopId != null) {
@@ -63,7 +65,9 @@ class GoogleSignInHelper {
       googleSignIn = GoogleSignIn(
         clientId: UniversalPlatform.isIOS || UniversalPlatform.isMacOS
             ? currentPlatform.iosClientId
-            : currentPlatform.androidClientId,
+            : UniversalPlatform.isAndroid
+                ? currentPlatform.androidClientId
+                : null,
         scopes: scopes,
       );
     }

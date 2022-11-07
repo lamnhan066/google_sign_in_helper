@@ -12,7 +12,7 @@ Make it easier for you to use google sign in on all platforms.
 **Initialize the plugin:**
 
 ``` dart
-final googleSignInHelper = GoogleSignInHelper.instance;
+final googleSignInHelper = GoogleSignInHelper();
 
 void main() async {
      googleSignInHelper.initialize(
