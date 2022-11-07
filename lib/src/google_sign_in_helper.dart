@@ -45,6 +45,8 @@ class GoogleSignInHelper {
   ///     GoogleSignInHelper.instance.initialize(currentPlatform: DefaultFirebaseOptions.currentPlatform);
   /// }
   /// ```
+  ///
+  /// Default scopes are: drive.appdata, profile, email
   void initialize({
     required FirebaseOptions currentPlatform,
     List<String> scopes = const [_driveAppdataScope, 'profile', 'email'],
