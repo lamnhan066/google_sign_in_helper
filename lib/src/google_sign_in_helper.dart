@@ -81,7 +81,7 @@ class GoogleSignInHelper {
   /// ```
   ///
   /// Default scopes are: profile, email
-  void initialize({
+  void initial({
     required FirebaseOptions currentPlatform,
     List<String> scopes = const [
       GoogleSignInScope.profile,
