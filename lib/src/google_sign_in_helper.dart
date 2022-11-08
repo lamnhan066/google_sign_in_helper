@@ -9,9 +9,44 @@ import 'google_auth_client.dart';
 import 'google_user.dart';
 
 class GoogleSignInScope {
-  static const appData = 'drive.appdata';
-  static const profile = 'userinfo.profile';
-  static const email = 'userinfo.email';
+  GoogleSignInScope._();
+
+  /// See profile
+  static const profile = 'https://www.googleapis.com/auth/userinfo.profile';
+
+  /// See email
+  static const email = 'https://www.googleapis.com/auth/userinfo.email';
+
+  /// See, edit, create, and delete all of your Google Drive files
+  static const driveScope = 'https://www.googleapis.com/auth/drive';
+
+  /// See, create, and delete its own configuration data in your Google Drive
+  static const driveAppdataScope =
+      'https://www.googleapis.com/auth/drive.appdata';
+
+  /// See, edit, create, and delete only the specific Google Drive files you use
+  /// with this app
+  static const driveFileScope = 'https://www.googleapis.com/auth/drive.file';
+
+  /// View and manage metadata of files in your Google Drive
+  static const driveMetadataScope =
+      'https://www.googleapis.com/auth/drive.metadata';
+
+  /// See information about your Google Drive files
+  static const driveMetadataReadonlyScope =
+      'https://www.googleapis.com/auth/drive.metadata.readonly';
+
+  /// View the photos, videos and albums in your Google Photos
+  static const drivePhotosReadonlyScope =
+      'https://www.googleapis.com/auth/drive.photos.readonly';
+
+  /// See and download all your Google Drive files
+  static const driveReadonlyScope =
+      'https://www.googleapis.com/auth/drive.readonly';
+
+  /// Modify your Google Apps Script scripts' behavior
+  static const driveScriptsScope =
+      'https://www.googleapis.com/auth/drive.scripts';
 }
 
 class GoogleSignInHelper {
