@@ -1,18 +1,18 @@
 name: google_sign_in_helper
 description: Make it easier for you to use google sign in on all platforms.
 version: 0.0.1
-homepage: https://github.com/vursin/google_sign_in_helper
+homepage: https://github.com/vnniz/google_sign_in_helper
 
 environment:
-  sdk: ">=2.17.0 <3.0.0"
-  flutter: ">=2.5.0"
+  sdk: ">=2.18.0 <4.0.0"
+  flutter: ">=3.3.0"
 
 dependencies:
-  firebase_core: ^2.1.0
+  firebase_core: ^2.14.0
   flutter:
     sdk: flutter
 
-  google_sign_in: ^6.0.2
+  google_sign_in: ^6.1.4
   google_sign_in_dartio: ^0.2.2+1
   http: ^0.13.5
   universal_platform: ^1.0.0+1
