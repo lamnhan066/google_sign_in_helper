@@ -13,14 +13,15 @@ dependencies:
     sdk: flutter
 
   google_sign_in: ^6.1.4
-  google_sign_in_dartio: ^0.2.2+1
-  http: ^0.13.5
+  google_sign_in_dartio:
+    git: https://github.com/vnniz/google_sign_in_dart
+  http: ^1.1.0
   universal_platform: ^1.0.0+1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^2.0.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
