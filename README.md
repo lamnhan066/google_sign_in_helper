@@ -12,16 +12,12 @@ Make it easier for you to use google sign in on all platforms.
 **Initialize the plugin:**
 
 ``` dart
-final googleSignInHelper = GoogleSignInHelper();
-
-void main() async {
-     final googleSignInHelper = GoogleSignInHelper(
-        currentPlatform: DefaultFirebaseOptions.currentPlatform,
-        
-        // Add desktop id to this if you're using desktop
-        desktopId: null,
-     );
- }
+final googleSignInHelper = GoogleSignInHelper(
+   currentPlatform: DefaultFirebaseOptions.currentPlatform,
+   
+   // Add desktop id to this if you're using desktop
+   desktopId: null,
+);
 ```
 
 **Sign in:**
