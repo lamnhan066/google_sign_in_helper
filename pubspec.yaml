@@ -1,27 +1,28 @@
 name: google_sign_in_helper
 description: Make it easier for you to use google sign in on all platforms.
 version: 0.0.1
-homepage: https://github.com/vnniz/google_sign_in_helper
+homepage: https://github.com/lamnhan066/google_sign_in_helper
+publish_to: none
 
 environment:
-  sdk: ">=2.18.0 <4.0.0"
+  sdk: ">=3.0.0 <4.0.0"
   flutter: ">=3.3.0"
 
 dependencies:
-  firebase_core: ^2.14.0
   flutter:
     sdk: flutter
 
-  google_sign_in: ^6.1.4
+  firebase_core: ^2.24.0
+  google_sign_in: ^6.1.6
   google_sign_in_dartio:
-    git: https://github.com/vnniz/google_sign_in_dart
-  http: ^1.1.0
+    git: https://github.com/lamnhan066/google_sign_in_dart
+  http: ^1.1.2
   universal_platform: ^1.0.0+1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.2
+  flutter_lints: ^3.0.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

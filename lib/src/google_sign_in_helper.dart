@@ -51,7 +51,7 @@ class GoogleSignInScope {
 
 class GoogleSignInHelper {
   /// Get GoogleSignIn instance
-  GoogleSignIn? googleSignIn;
+  late GoogleSignIn googleSignIn;
 
   /// Get headers from the google sign in
   Map<String, String> headers = {};
@@ -71,24 +71,24 @@ class GoogleSignInHelper {
       StreamController.broadcast();
 
   /// Get current signed in state
-  bool get isSigned => googleSignIn?.currentUser != null;
+  bool get isSigned => user != null;
 
-  /// Initialize this plugin in main():
+  /// Create a instance:
   /// ``` dart
   /// void main() async {
-  ///     GoogleSignInHelper.instance.initialize(currentPlatform: DefaultFirebaseOptions.currentPlatform);
+  ///     final signInHelper = GoogleSignInHelper(currentPlatform: DefaultFirebaseOptions.currentPlatform);
   /// }
   /// ```
   ///
   /// Default scopes are: profile, email
-  void initial({
+  GoogleSignInHelper({
     required FirebaseOptions currentPlatform,
     List<String> scopes = const [
       GoogleSignInScope.profile,
       GoogleSignInScope.email,
     ],
     String? desktopId,
-  }) async {
+  }) {
     if (UniversalPlatform.isDesktop && desktopId != null) {
       GoogleSignInDart.register(
         clientId: desktopId,
@@ -108,11 +108,9 @@ class GoogleSignInHelper {
     }
   }
 
-  /// Sign in
+  /// Sign in.
   Future<bool> signIn() async {
-    assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
-
-    final result = await googleSignIn!.signIn();
+    final result = await googleSignIn.signIn();
 
     if (result != null) await _doIfSignedIn();
 
@@ -120,11 +118,9 @@ class GoogleSignInHelper {
     return result != null;
   }
 
-  /// Sign in silently
+  /// Sign in silently.
   Future<bool> signInSilently() async {
-    assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
-
-    final result = await googleSignIn!.signInSilently();
+    final result = await googleSignIn.signInSilently();
 
     if (result != null) await _doIfSignedIn();
 
@@ -132,36 +128,29 @@ class GoogleSignInHelper {
     return result != null;
   }
 
-  /// Sign out
+  /// Sign out.
   Future<void> signOut() async {
-    assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
-
-    await googleSignIn!.signOut();
+    await googleSignIn.signOut();
     _doIfSignOut();
     _onSignedChangeController.sink.add(false);
   }
 
-  /// Disconnect
+  /// Disconnect.
   Future<void> disconnect() async {
-    assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
-
-    await googleSignIn!.disconnect();
+    await googleSignIn.disconnect();
     _doIfSignOut();
     _onSignedChangeController.sink.add(false);
   }
 
   Future<void> _doIfSignedIn() async {
-    assert(googleSignIn != null, 'You have to `initialize` the plugin first!');
-
-    headers = await googleSignIn!.currentUser!.authHeaders;
-    authInfo = await googleSignIn!.currentUser!.authentication;
+    headers = await googleSignIn.currentUser!.authHeaders;
+    authInfo = await googleSignIn.currentUser!.authentication;
 
     client = GoogleAuthClient(headers);
     user = await _getUserInfo();
   }
 
   void _doIfSignOut() async {
-    googleSignIn = null;
     headers = {};
     authInfo = null;
     client = null;

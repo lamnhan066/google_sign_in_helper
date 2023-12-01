@@ -15,7 +15,7 @@ Make it easier for you to use google sign in on all platforms.
 final googleSignInHelper = GoogleSignInHelper();
 
 void main() async {
-     googleSignInHelper.initial(
+     final googleSignInHelper = GoogleSignInHelper(
         currentPlatform: DefaultFirebaseOptions.currentPlatform,
         
         // Add desktop id to this if you're using desktop
