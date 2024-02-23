@@ -142,6 +142,16 @@ class GoogleSignInHelper {
     _onSignedChangeController.sink.add(false);
   }
 
+  /// Can access scopes
+  Future<void> canAccessScopes(List<String> scopes) {
+    return googleSignIn.canAccessScopes(scopes);
+  }
+
+  /// Request additional scopes
+  Future<void> requestScopes(List<String> scopes) {
+    return googleSignIn.requestScopes(scopes);
+  }
+
   Future<void> _doIfSignedIn() async {
     headers = await googleSignIn.currentUser!.authHeaders;
     authInfo = await googleSignIn.currentUser!.authentication;
