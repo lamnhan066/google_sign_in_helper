@@ -143,12 +143,12 @@ class GoogleSignInHelper {
   }
 
   /// Can access scopes
-  Future<void> canAccessScopes(List<String> scopes) {
+  Future<bool> canAccessScopes(List<String> scopes) {
     return googleSignIn.canAccessScopes(scopes);
   }
 
   /// Request additional scopes
-  Future<void> requestScopes(List<String> scopes) {
+  Future<bool> requestScopes(List<String> scopes) {
     return googleSignIn.requestScopes(scopes);
   }
 
