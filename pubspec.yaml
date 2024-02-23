@@ -12,10 +12,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  firebase_core: ^2.24.0
-  google_sign_in: ^6.1.6
-  google_sign_in_dartio:
-    git: https://github.com/lamnhan066/google_sign_in_dart
+  firebase_core: ^2.25.4
+  google_sign_in: ^6.2.1
+  google_sign_in_dartio: ^0.3.0
   http: ^1.1.2
   universal_platform: ^1.0.0+1
 
