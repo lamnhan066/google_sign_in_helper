@@ -110,6 +110,10 @@ class GoogleSignInHelper {
 
   /// Sign in.
   Future<bool> signIn() async {
+    try {
+      await googleSignIn.signOut();
+    } catch (_) {}
+
     final result = await googleSignIn.signIn();
 
     if (result != null) await _doIfSignedIn();
