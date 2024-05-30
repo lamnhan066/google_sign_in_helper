@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
+import 'package:google_sign_in_helper/src/sign_in_button.dart';
 import 'package:universal_platform/universal_platform.dart';
 
 import 'google_auth_client.dart';
@@ -108,7 +110,15 @@ class GoogleSignInHelper {
     }
   }
 
+  /// Render a sign in button.
+  Widget signInButton({String text = 'Sign in'}) => buildSignInButton(
+        text: text,
+        onPressed: signIn,
+      );
+
   /// Sign in.
+  ///
+  /// Not supported on the Web anymore. Use `signInButton()` widget instead.
   Future<bool> signIn() async {
     try {
       await googleSignIn.signOut();
