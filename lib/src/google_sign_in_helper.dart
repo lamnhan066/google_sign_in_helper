@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
@@ -67,6 +68,8 @@ class GoogleSignInHelper {
   /// Get [GoogleAuthClient]
   GoogleAuthClient? client;
 
+  final List<String> scopes;
+
   /// Change when user sign in or sign out
   Stream<bool> get onSignChanged => _onSignedChangeController.stream;
   final StreamController<bool> _onSignedChangeController =
@@ -85,7 +88,7 @@ class GoogleSignInHelper {
   /// Default scopes are: profile, email
   GoogleSignInHelper({
     required FirebaseOptions currentPlatform,
-    List<String> scopes = const [
+    this.scopes = const [
       GoogleSignInScope.profile,
       GoogleSignInScope.email,
     ],
@@ -108,6 +111,21 @@ class GoogleSignInHelper {
         scopes: scopes,
       );
     }
+    googleSignIn.onCurrentUserChanged.listen((account) async {
+      bool isAuthorized = account != null;
+
+      if (kIsWeb && account != null) {
+        isAuthorized = await requestScopes(scopes);
+      }
+
+      if (isAuthorized) {
+        await _doIfSignedIn();
+      } else {
+        _doIfSignOut();
+      }
+
+      _onSignedChangeController.sink.add(isAuthorized);
+    });
   }
 
   /// Render a sign in button.
@@ -119,41 +137,27 @@ class GoogleSignInHelper {
   /// Sign in.
   ///
   /// Not supported on the Web anymore. Use `signInButton()` widget instead.
-  Future<bool> signIn() async {
+  Future<void> signIn() async {
     try {
       await googleSignIn.signOut();
     } catch (_) {}
 
-    final result = await googleSignIn.signIn();
-
-    if (result != null) await _doIfSignedIn();
-
-    _onSignedChangeController.sink.add(result != null);
-    return result != null;
+    await googleSignIn.signIn();
   }
 
   /// Sign in silently.
-  Future<bool> signInSilently() async {
-    final result = await googleSignIn.signInSilently();
-
-    if (result != null) await _doIfSignedIn();
-
-    _onSignedChangeController.sink.add(result != null);
-    return result != null;
+  Future<void> signInSilently() async {
+    await googleSignIn.signInSilently();
   }
 
   /// Sign out.
   Future<void> signOut() async {
     await googleSignIn.signOut();
-    _doIfSignOut();
-    _onSignedChangeController.sink.add(false);
   }
 
   /// Disconnect.
   Future<void> disconnect() async {
     await googleSignIn.disconnect();
-    _doIfSignOut();
-    _onSignedChangeController.sink.add(false);
   }
 
   /// Can access scopes
