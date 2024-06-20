@@ -75,6 +75,8 @@ class GoogleSignInHelper {
   final StreamController<bool> _onSignedChangeController =
       StreamController.broadcast();
 
+  Completer<bool>? _signInCompleter;
+
   /// Get current signed in state
   bool get isSigned => user != null;
 
@@ -124,6 +126,8 @@ class GoogleSignInHelper {
         _doIfSignOut();
       }
 
+      _signInCompleter?.complete(isAuthorized);
+      _signInCompleter = null;
       _onSignedChangeController.sink.add(isAuthorized);
     });
   }
@@ -137,17 +141,22 @@ class GoogleSignInHelper {
   /// Sign in.
   ///
   /// Not supported on the Web anymore. Use `signInButton()` widget instead.
-  Future<void> signIn() async {
+  Future<bool> signIn() async {
     try {
       await googleSignIn.signOut();
     } catch (_) {}
 
+    _signInCompleter = Completer<bool>();
     await googleSignIn.signIn();
+
+    return _signInCompleter!.future;
   }
 
   /// Sign in silently.
-  Future<void> signInSilently() async {
+  Future<bool> signInSilently() async {
+    _signInCompleter = Completer<bool>();
     await googleSignIn.signInSilently();
+    return _signInCompleter!.future;
   }
 
   /// Sign out.
