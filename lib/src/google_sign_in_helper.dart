@@ -126,7 +126,9 @@ class GoogleSignInHelper {
         _doIfSignOut();
       }
 
-      _signInCompleter?.complete(isAuthorized);
+      if (_signInCompleter != null && !_signInCompleter!.isCompleted) {
+        _signInCompleter!.complete(isAuthorized);
+      }
       _signInCompleter = null;
       _onSignedChangeController.sink.add(isAuthorized);
     });
@@ -147,7 +149,7 @@ class GoogleSignInHelper {
     } catch (_) {}
 
     _signInCompleter = Completer<bool>();
-    await googleSignIn.signIn();
+    googleSignIn.signIn();
 
     return _signInCompleter!.future;
   }
