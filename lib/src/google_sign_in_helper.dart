@@ -75,8 +75,6 @@ class GoogleSignInHelper {
   final StreamController<bool> _onSignedChangeController =
       StreamController.broadcast();
 
-  Completer<bool>? _signInCompleter;
-
   /// Get current signed in state
   bool get isSigned => user != null;
 
@@ -113,25 +111,6 @@ class GoogleSignInHelper {
         scopes: scopes,
       );
     }
-    googleSignIn.onCurrentUserChanged.listen((account) async {
-      bool isAuthorized = account != null;
-
-      if (kIsWeb && account != null) {
-        isAuthorized = await requestScopes(scopes);
-      }
-
-      if (isAuthorized) {
-        await _doIfSignedIn();
-      } else {
-        _doIfSignOut();
-      }
-
-      if (_signInCompleter != null && !_signInCompleter!.isCompleted) {
-        _signInCompleter!.complete(isAuthorized);
-      }
-      _signInCompleter = null;
-      _onSignedChangeController.sink.add(isAuthorized);
-    });
   }
 
   /// Render a sign in button.
@@ -147,28 +126,26 @@ class GoogleSignInHelper {
     try {
       await googleSignIn.signOut();
     } catch (_) {}
-
-    _signInCompleter = Completer<bool>();
-    googleSignIn.signIn();
-
-    return _signInCompleter!.future;
+    final account = await googleSignIn.signIn();
+    return _check(account != null);
   }
 
   /// Sign in silently.
   Future<bool> signInSilently() async {
-    _signInCompleter = Completer<bool>();
-    await googleSignIn.signInSilently();
-    return _signInCompleter!.future;
+    final account = await googleSignIn.signInSilently();
+    return _check(account != null);
   }
 
   /// Sign out.
   Future<void> signOut() async {
     await googleSignIn.signOut();
+    await _check(false);
   }
 
   /// Disconnect.
   Future<void> disconnect() async {
     await googleSignIn.disconnect();
+    await _check(false);
   }
 
   /// Can access scopes
@@ -179,6 +156,22 @@ class GoogleSignInHelper {
   /// Request additional scopes
   Future<bool> requestScopes(List<String> scopes) {
     return googleSignIn.requestScopes(scopes);
+  }
+
+  Future<bool> _check(bool isAuthorized) async {
+    if (kIsWeb && isAuthorized) {
+      isAuthorized = await requestScopes(scopes);
+    }
+
+    if (isAuthorized) {
+      await _doIfSignedIn();
+    } else {
+      _doIfSignOut();
+    }
+
+    _onSignedChangeController.sink.add(isAuthorized);
+
+    return isAuthorized;
   }
 
   Future<void> _doIfSignedIn() async {
