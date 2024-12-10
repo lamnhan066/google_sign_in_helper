@@ -1,4 +1,4 @@
-library google_sign_in_helper;
+library;
 
 export 'src/google_auth_client.dart';
 export 'src/google_sign_in_helper.dart';
