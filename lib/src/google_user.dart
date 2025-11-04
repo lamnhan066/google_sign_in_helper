@@ -21,16 +21,17 @@ class GoogleUser {
     required this.locale,
   });
 
-  GoogleUser copyWith(
-      {String? sub,
-      String? name,
-      String? givenName,
-      String? familyName,
-      String? picture,
-      String? email,
-      bool? emailVerified,
-      String? locale,
-      String? firebaseUserId}) {
+  GoogleUser copyWith({
+    String? sub,
+    String? name,
+    String? givenName,
+    String? familyName,
+    String? picture,
+    String? email,
+    bool? emailVerified,
+    String? locale,
+    String? firebaseUserId,
+  }) {
     return GoogleUser(
       sub: sub ?? this.sub,
       name: name ?? this.name,

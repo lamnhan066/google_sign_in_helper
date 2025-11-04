@@ -5,13 +5,13 @@ homepage: https://github.com/lamnhan066/google_sign_in_helper
 publish_to: none
 
 environment:
-  sdk: ^3.3.0
+  sdk: ^3.9.0
 
 dependencies:
   flutter:
     sdk: flutter
 
-  firebase_core: ^3.3.0
+  firebase_core: ^4.2.1
   google_sign_in: ^6.2.1
   google_sign_in_dartio: ^0.3.0
   http: ^1.2.2
@@ -20,4 +20,4 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0

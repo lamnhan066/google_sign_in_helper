@@ -88,36 +88,27 @@ class GoogleSignInHelper {
   /// Default scopes are: profile, email
   GoogleSignInHelper({
     required FirebaseOptions currentPlatform,
-    this.scopes = const [
-      GoogleSignInScope.profile,
-      GoogleSignInScope.email,
-    ],
+    this.scopes = const [GoogleSignInScope.profile, GoogleSignInScope.email],
     String? desktopId,
   }) {
     if (UniversalPlatform.isDesktop && desktopId != null) {
-      GoogleSignInDart.register(
-        clientId: desktopId,
-      );
-      googleSignIn = GoogleSignIn(
-        scopes: scopes,
-      );
+      GoogleSignInDart.register(clientId: desktopId);
+      googleSignIn = GoogleSignIn(scopes: scopes);
     } else {
       googleSignIn = GoogleSignIn(
         clientId: UniversalPlatform.isIOS || UniversalPlatform.isMacOS
             ? currentPlatform.iosClientId
             : UniversalPlatform.isAndroid
-                ? currentPlatform.androidClientId
-                : null,
+            ? currentPlatform.androidClientId
+            : null,
         scopes: scopes,
       );
     }
   }
 
   /// Render a sign in button.
-  Widget signInButton({String text = 'Sign in'}) => buildSignInButton(
-        text: text,
-        onPressed: signIn,
-      );
+  Widget signInButton({String text = 'Sign in'}) =>
+      buildSignInButton(text: text, onPressed: signIn);
 
   /// Sign in.
   ///
@@ -192,8 +183,9 @@ class GoogleSignInHelper {
   Future<GoogleUser?> _getUserInfo() async {
     if (client == null) return null;
 
-    final response = await client!
-        .get(Uri.parse('https://www.googleapis.com/oauth2/v3/userinfo'));
+    final response = await client!.get(
+      Uri.parse('https://www.googleapis.com/oauth2/v3/userinfo'),
+    );
 
     return GoogleUser.fromJson(response.body);
   }
