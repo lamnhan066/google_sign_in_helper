@@ -1,10 +1,9 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
+// import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
 import 'package:google_sign_in_helper/src/sign_in_button.dart';
 import 'package:universal_platform/universal_platform.dart';
 
@@ -56,6 +55,9 @@ class GoogleSignInHelper {
   /// Get GoogleSignIn instance
   late GoogleSignIn googleSignIn;
 
+  GoogleSignInAccount? _currentAccount;
+  late Future<void> _initializeFuture;
+
   /// Get headers from the google sign in
   Map<String, String> headers = {};
 
@@ -91,19 +93,20 @@ class GoogleSignInHelper {
     this.scopes = const [GoogleSignInScope.profile, GoogleSignInScope.email],
     String? desktopId,
   }) {
+    final String? clientId;
+
     if (UniversalPlatform.isDesktop && desktopId != null) {
-      GoogleSignInDart.register(clientId: desktopId);
-      googleSignIn = GoogleSignIn(scopes: scopes);
+      clientId = desktopId;
     } else {
-      googleSignIn = GoogleSignIn(
-        clientId: UniversalPlatform.isIOS || UniversalPlatform.isMacOS
-            ? currentPlatform.iosClientId
-            : UniversalPlatform.isAndroid
-            ? currentPlatform.androidClientId
-            : null,
-        scopes: scopes,
-      );
+      clientId = UniversalPlatform.isIOS || UniversalPlatform.isMacOS
+          ? currentPlatform.iosClientId
+          : UniversalPlatform.isAndroid
+          ? currentPlatform.androidClientId
+          : null;
     }
+
+    googleSignIn = GoogleSignIn.instance;
+    _initializeFuture = googleSignIn.initialize(clientId: clientId);
   }
 
   /// Render a sign in button.
@@ -114,48 +117,87 @@ class GoogleSignInHelper {
   ///
   /// Not supported on the Web anymore. Use `signInButton()` widget instead.
   Future<bool> signIn() async {
+    await _initializeFuture;
+
+    if (!googleSignIn.supportsAuthenticate()) {
+      return _check(false, account: null);
+    }
+
     try {
       await googleSignIn.signOut();
     } catch (_) {}
-    final account = await googleSignIn.signIn();
-    return _check(account != null);
+
+    final account = await googleSignIn.authenticate(scopeHint: scopes);
+    return _check(true, account: account);
   }
 
   /// Sign in silently.
   Future<bool> signInSilently() async {
-    final account = await googleSignIn.signInSilently();
-    return _check(account != null);
+    await _initializeFuture;
+
+    final Future<GoogleSignInAccount?>? attempt = googleSignIn
+        .attemptLightweightAuthentication();
+    if (attempt == null) {
+      return _check(false, account: null);
+    }
+
+    final account = await attempt;
+    return _check(account != null, account: account);
   }
 
   /// Sign out.
   Future<void> signOut() async {
+    await _initializeFuture;
     await googleSignIn.signOut();
-    await _check(false);
+    await _check(false, account: null);
   }
 
   /// Disconnect.
   Future<void> disconnect() async {
+    await _initializeFuture;
     await googleSignIn.disconnect();
-    await _check(false);
+    await _check(false, account: null);
   }
 
   /// Can access scopes
-  Future<bool> canAccessScopes(List<String> scopes) {
-    return googleSignIn.canAccessScopes(scopes);
+  Future<bool> canAccessScopes(List<String> scopes) async {
+    await _initializeFuture;
+
+    final GoogleSignInAccount? account = _currentAccount;
+    if (account == null) {
+      return false;
+    }
+
+    final GoogleSignInClientAuthorization? authorization = await account
+        .authorizationClient
+        .authorizationForScopes(scopes);
+    return authorization != null;
   }
 
   /// Request additional scopes
-  Future<bool> requestScopes(List<String> scopes) {
-    return googleSignIn.requestScopes(scopes);
+  Future<bool> requestScopes(List<String> scopes) async {
+    await _initializeFuture;
+
+    final GoogleSignInAccount? account = _currentAccount;
+    if (account == null) {
+      return false;
+    }
+
+    try {
+      await account.authorizationClient.authorizeScopes(scopes);
+      return true;
+    } on GoogleSignInException {
+      return false;
+    }
   }
 
-  Future<bool> _check(bool isAuthorized) async {
-    if (kIsWeb && isAuthorized) {
-      isAuthorized = await requestScopes(scopes);
+  Future<bool> _check(bool isAuthorized, {GoogleSignInAccount? account}) async {
+    if (isAuthorized && account == null) {
+      return _check(false, account: null);
     }
 
     if (isAuthorized) {
-      await _doIfSignedIn();
+      await _doIfSignedIn(account!);
     } else {
       _doIfSignOut();
     }
@@ -165,15 +207,23 @@ class GoogleSignInHelper {
     return isAuthorized;
   }
 
-  Future<void> _doIfSignedIn() async {
-    headers = await googleSignIn.currentUser!.authHeaders;
-    authInfo = await googleSignIn.currentUser!.authentication;
+  Future<void> _doIfSignedIn(GoogleSignInAccount account) async {
+    _currentAccount = account;
+    authInfo = account.authentication;
+
+    headers =
+        await account.authorizationClient.authorizationHeaders(
+          scopes,
+          promptIfNecessary: true,
+        ) ??
+        <String, String>{};
 
     client = GoogleAuthClient(headers);
     user = await _getUserInfo();
   }
 
-  void _doIfSignOut() async {
+  void _doIfSignOut() {
+    _currentAccount = null;
     headers = {};
     authInfo = null;
     client = null;
