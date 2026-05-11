@@ -32,6 +32,41 @@ class GoogleOAuthTokenResponse {
   final Map<String, dynamic> raw;
 }
 
+class AccessTokenCache {
+  AccessTokenCache({DateTime Function()? now}) : _now = now ?? DateTime.now;
+
+  final DateTime Function() _now;
+
+  String? _accessToken;
+  DateTime? _expiresAt;
+
+  String? get accessToken => _accessToken;
+
+  DateTime? get expiresAt => _expiresAt;
+
+  bool get hasFreshAccessToken =>
+      _accessToken != null &&
+      _expiresAt != null &&
+      _now().isBefore(_expiresAt!);
+
+  void store(GoogleOAuthTokenResponse response) {
+    final expiresIn = response.expiresIn;
+    if (expiresIn == null) {
+      clear();
+      return;
+    }
+
+    final validSeconds = expiresIn > 30 ? expiresIn - 30 : 0;
+    _accessToken = response.accessToken;
+    _expiresAt = _now().add(Duration(seconds: validSeconds));
+  }
+
+  void clear() {
+    _accessToken = null;
+    _expiresAt = null;
+  }
+}
+
 class GoogleOAuthServer implements OAuthServer {
   GoogleOAuthServer(
     this.endpoint, {

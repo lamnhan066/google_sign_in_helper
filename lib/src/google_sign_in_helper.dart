@@ -66,6 +66,7 @@ class GoogleSignInHelper {
   late Future<void> _initializeFuture;
   final AuthStorage? authStorage;
   late final OAuthServer _oauthServer;
+  final AccessTokenCache _accessTokenCache = AccessTokenCache();
 
   /// Get headers from the google sign in
   Map<String, String> headers = {};
@@ -205,6 +206,14 @@ class GoogleSignInHelper {
   /// Returns `true` and populates [headers] / [client] on success so that
   /// Drive API calls can proceed immediately after awaiting this method.
   Future<bool> signInSilently() async {
+    if (_accessTokenCache.hasFreshAccessToken) {
+      _logger.debug(() => 'Silent sign in using cached access token');
+      return _applyAccessToken(
+        _accessTokenCache.accessToken!,
+        skipUserInfoLookup: user != null && client != null,
+      );
+    }
+
     final refreshToken = await authStorage?.read();
     if (refreshToken == null) {
       _logger.debug(() => 'Silent sign in skipped: no refresh token available');
@@ -230,25 +239,9 @@ class GoogleSignInHelper {
             'Silent sign in received access token${response.refreshToken == null ? '' : ' and refresh token'}',
       );
 
-      // Populate headers and client directly — no GoogleSignInAccount needed.
-      headers = {
-        'Authorization': 'Bearer ${response.accessToken}',
-        'X-Goog-AuthUser': '0',
-      };
-      client = GoogleAuthClient(headers);
-      user = await _getUserInfo();
+      _accessTokenCache.store(response);
 
-      // user will be null if the token was rejected by the userinfo endpoint.
-      if (user == null) {
-        _logger.debug(
-          () => 'Silent sign in failed: user info request returned no user',
-        );
-        return _check(false, account: null);
-      }
-
-      _onSignedChangeController.sink.add(true);
-      _logger.debug(() => 'Silent sign in completed: ${user?.email}');
-      return true;
+      return _applyAccessToken(response.accessToken);
     } catch (_) {
       _logger.debug(() => 'Silent sign in failed with an exception');
       return _check(false, account: null);
@@ -290,6 +283,8 @@ class GoogleSignInHelper {
         _logger.debug(() => 'Refresh token exchange failed on backend');
         return;
       }
+
+      _accessTokenCache.store(response);
 
       _logger.debug(
         () =>
@@ -413,7 +408,37 @@ class GoogleSignInHelper {
     authInfo = null;
     client = null;
     user = null;
+    _accessTokenCache.clear();
     _logger.debug(() => 'Local sign in state cleared');
+  }
+
+  Future<bool> _applyAccessToken(
+    String accessToken, {
+    bool skipUserInfoLookup = false,
+  }) async {
+    headers = {'Authorization': 'Bearer $accessToken', 'X-Goog-AuthUser': '0'};
+    client = GoogleAuthClient(headers);
+
+    if (skipUserInfoLookup && user != null) {
+      _onSignedChangeController.sink.add(true);
+      _logger.debug(() => 'Silent sign in completed using cached user state');
+      return true;
+    }
+
+    user = await _getUserInfo();
+
+    // user will be null if the token was rejected by the userinfo endpoint.
+    if (user == null) {
+      _logger.debug(
+        () => 'Silent sign in failed: user info request returned no user',
+      );
+      _accessTokenCache.clear();
+      return _check(false, account: null);
+    }
+
+    _onSignedChangeController.sink.add(true);
+    _logger.debug(() => 'Silent sign in completed: ${user?.email}');
+    return true;
   }
 
   Future<GoogleUser?> _getUserInfo() async {
