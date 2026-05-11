@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 
-import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 // import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
 import 'package:google_sign_in_helper/src/sign_in_button.dart';
-import 'package:universal_platform/universal_platform.dart';
+import 'package:http/http.dart' as http;
+import 'package:lite_logger/lite_logger.dart';
 
+import 'auth_storage.dart';
 import 'google_auth_client.dart';
 import 'google_user.dart';
 
@@ -54,9 +57,16 @@ class GoogleSignInScope {
 class GoogleSignInHelper {
   /// Get GoogleSignIn instance
   late GoogleSignIn googleSignIn;
+  late final LiteLogger _logger;
+
+  final String clientId;
+  final String clientSecret;
+  final String redirectUri;
+  final bool debug;
 
   GoogleSignInAccount? _currentAccount;
   late Future<void> _initializeFuture;
+  final AuthStorage? authStorage;
 
   /// Get headers from the google sign in
   Map<String, String> headers = {};
@@ -83,30 +93,40 @@ class GoogleSignInHelper {
   /// Create a instance:
   /// ``` dart
   /// void main() async {
-  ///     final signInHelper = GoogleSignInHelper(currentPlatform: DefaultFirebaseOptions.currentPlatform);
+  ///     final signInHelper = GoogleSignInHelper(
+  ///       clientId: 'YOUR_CLIENT_ID',
+  ///       clientSecret: 'YOUR_CLIENT_SECRET',
+  ///       redirectUri: 'YOUR_REDIRECT_URI',
+  ///     );
   /// }
   /// ```
   ///
   /// Default scopes are: profile, email
   GoogleSignInHelper({
-    required FirebaseOptions currentPlatform,
+    required this.clientId,
+    required this.clientSecret,
+    required this.redirectUri,
     this.scopes = const [GoogleSignInScope.profile, GoogleSignInScope.email],
-    String? desktopId,
+    this.authStorage,
+    this.debug = false,
   }) {
-    final String? clientId;
-
-    if (UniversalPlatform.isDesktop && desktopId != null) {
-      clientId = desktopId;
-    } else {
-      clientId = UniversalPlatform.isIOS || UniversalPlatform.isMacOS
-          ? currentPlatform.iosClientId
-          : UniversalPlatform.isAndroid
-          ? currentPlatform.androidClientId
-          : null;
-    }
+    _logger = LiteLogger(
+      name: 'GoogleSignInHelper',
+      enabled: debug,
+      minLevel: LogLevel.debug,
+      usePrint: kIsWeb,
+    );
 
     googleSignIn = GoogleSignIn.instance;
-    _initializeFuture = googleSignIn.initialize(clientId: clientId);
+    _logger.debug(() => 'Initializing Google SignIn Helper');
+    _initializeFuture = googleSignIn
+        .initialize(
+          clientId: kIsWeb ? clientId : null,
+          serverClientId: kIsWeb ? null : clientId,
+        )
+        .whenComplete(() {
+          _logger.debug(() => 'Google Sign In initialized');
+        });
   }
 
   /// Render a sign in button.
@@ -118,8 +138,10 @@ class GoogleSignInHelper {
   /// Not supported on the Web anymore. Use `signInButton()` widget instead.
   Future<bool> signIn() async {
     await _initializeFuture;
+    _logger.debug(() => 'Starting interactive sign in');
 
     if (!googleSignIn.supportsAuthenticate()) {
+      _logger.debug(() => 'Interactive sign in not supported on this platform');
       return _check(false, account: null);
     }
 
@@ -128,26 +150,176 @@ class GoogleSignInHelper {
     } catch (_) {}
 
     final account = await googleSignIn.authenticate(scopeHint: scopes);
-    return _check(true, account: account);
+    final isSignedIn = await _check(true, account: account);
+    await _storeRefreshToken(account);
+    _logger.debug(() => 'Interactive sign in completed: $isSignedIn');
+    return isSignedIn;
   }
 
-  /// Sign in silently.
-  Future<bool> signInSilently() async {
+  /// Sign in lightweight.
+  ///
+  /// Attempts a lightweight (minimal UI) authentication using
+  /// [GoogleSignIn.attemptLightweightAuthentication]. This may show a small
+  /// system-level UI prompt and requires an active app foreground context.
+  /// Use this as a fast path on app resume before falling back to [signIn].
+  Future<bool> signInLightweight() async {
     await _initializeFuture;
+    _logger.debug(() => 'Starting lightweight sign in');
 
     final Future<GoogleSignInAccount?>? attempt = googleSignIn
         .attemptLightweightAuthentication();
     if (attempt == null) {
+      _logger.debug(() => 'Lightweight sign in not supported on this platform');
       return _check(false, account: null);
     }
 
     final account = await attempt;
-    return _check(account != null, account: account);
+    final isSignedIn = await _check(account != null, account: account);
+    _logger.debug(() => 'Lightweight sign in completed: $isSignedIn');
+    return isSignedIn;
+  }
+
+  /// Sign in silently using a stored refresh token.
+  ///
+  /// Exchanges the stored OAuth2 refresh token for a fresh access token via
+  /// the token endpoint — no UI is shown and no [GoogleSignIn] instance is
+  /// involved. This is the only method that works reliably in background /
+  /// headless contexts (e.g. `background_fetch` when the app is terminated).
+  /// On Web, this only works if a refresh token was already obtained by some
+  /// other means; the client-side web sign-in flow cannot mint one itself.
+  ///
+  /// Requirements:
+  /// - The user must have signed in at least once via [signIn], which must
+  ///   have stored a refresh token via [AuthStorage.save].
+  /// - [clientId] and [clientSecret] from the constructor identify your OAuth2
+  ///   Web client (from Google Cloud Console). In production, prefer routing
+  ///   the refresh through your own backend so [clientSecret] never ships in
+  ///   the binary.
+  ///
+  /// Returns `true` and populates [headers] / [client] on success so that
+  /// Drive API calls can proceed immediately after awaiting this method.
+  Future<bool> signInSilently() async {
+    final refreshToken = await authStorage?.read();
+    if (refreshToken == null) {
+      _logger.debug(() => 'Silent sign in skipped: no refresh token available');
+      return _check(false, account: null);
+    }
+
+    _logger.debug(() => 'Starting silent sign in');
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://oauth2.googleapis.com/token'),
+        body: {
+          'refresh_token': refreshToken,
+          'client_id': clientId,
+          'client_secret': clientSecret,
+          'grant_type': 'refresh_token',
+        },
+      );
+      if (response.statusCode != 200) {
+        _logger.debug(
+          () =>
+              'Silent sign in failed: token exchange returned ${response.statusCode}',
+        );
+        return _check(false, account: null);
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final accessToken = data['access_token'] as String?;
+      if (accessToken == null) {
+        _logger.debug(() => 'Silent sign in failed: access token missing');
+        return _check(false, account: null);
+      }
+
+      // Populate headers and client directly — no GoogleSignInAccount needed.
+      headers = {
+        'Authorization': 'Bearer $accessToken',
+        'X-Goog-AuthUser': '0',
+      };
+      client = GoogleAuthClient(headers);
+      user = await _getUserInfo();
+
+      // user will be null if the token was rejected by the userinfo endpoint.
+      if (user == null) {
+        _logger.debug(
+          () => 'Silent sign in failed: user info request returned no user',
+        );
+        return _check(false, account: null);
+      }
+
+      _onSignedChangeController.sink.add(true);
+      _logger.debug(() => 'Silent sign in completed: ${user?.email}');
+      return true;
+    } catch (_) {
+      _logger.debug(() => 'Silent sign in failed with an exception');
+      return _check(false, account: null);
+    }
+  }
+
+  Future<void> _storeRefreshToken(GoogleSignInAccount account) async {
+    final storage = authStorage;
+    if (storage == null) {
+      _logger.debug(
+        () => 'Skipping refresh token storage: no AuthStorage configured',
+      );
+      return;
+    }
+
+    if (kIsWeb) {
+      _logger.debug(() => 'Skipping refresh token storage on web');
+      return;
+    }
+
+    try {
+      final serverAuth = await account.authorizationClient.authorizeServer(
+        scopes,
+      );
+      final serverAuthCode = serverAuth?.serverAuthCode;
+      if (serverAuthCode == null) {
+        _logger.debug(
+          () => 'Skipping refresh token storage: server auth code missing',
+        );
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('https://oauth2.googleapis.com/token'),
+        body: {
+          'code': serverAuthCode,
+          'client_id': clientId,
+          'client_secret': clientSecret,
+          'redirect_uri': redirectUri,
+          'grant_type': 'authorization_code',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        _logger.debug(
+          () => 'Refresh token exchange failed: ${response.statusCode}',
+        );
+        return;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      _logger.debug(() => 'Refresh token exchange response: $data');
+      final refreshToken = data['refresh_token'] as String?;
+      if (refreshToken == null) {
+        _logger.debug(
+          () => 'Refresh token exchange completed without a refresh token',
+        );
+        return;
+      }
+
+      await storage.save(refreshToken);
+      _logger.debug(() => 'Refresh token saved');
+    } catch (_) {}
   }
 
   /// Sign out.
   Future<void> signOut() async {
     await _initializeFuture;
+    _logger.debug(() => 'Signing out');
     await googleSignIn.signOut();
     await _check(false, account: null);
   }
@@ -155,6 +327,7 @@ class GoogleSignInHelper {
   /// Disconnect.
   Future<void> disconnect() async {
     await _initializeFuture;
+    _logger.debug(() => 'Disconnecting Google Sign In');
     await googleSignIn.disconnect();
     await _check(false, account: null);
   }
@@ -165,12 +338,16 @@ class GoogleSignInHelper {
 
     final GoogleSignInAccount? account = _currentAccount;
     if (account == null) {
+      _logger.debug(() => 'Cannot check scopes: no signed in account');
       return false;
     }
 
     final GoogleSignInClientAuthorization? authorization = await account
         .authorizationClient
         .authorizationForScopes(scopes);
+    _logger.debug(
+      () => 'Scope access check completed: ${authorization != null}',
+    );
     return authorization != null;
   }
 
@@ -180,13 +357,16 @@ class GoogleSignInHelper {
 
     final GoogleSignInAccount? account = _currentAccount;
     if (account == null) {
+      _logger.debug(() => 'Cannot request scopes: no signed in account');
       return false;
     }
 
     try {
       await account.authorizationClient.authorizeScopes(scopes);
+      _logger.debug(() => 'Requested additional scopes successfully');
       return true;
     } on GoogleSignInException {
+      _logger.debug(() => 'Requesting additional scopes failed');
       return false;
     }
   }
@@ -203,6 +383,10 @@ class GoogleSignInHelper {
     }
 
     _onSignedChangeController.sink.add(isAuthorized);
+    _logger.debug(
+      () =>
+          isAuthorized ? 'Signed in state updated' : 'Signed out state updated',
+    );
 
     return isAuthorized;
   }
@@ -220,6 +404,10 @@ class GoogleSignInHelper {
 
     client = GoogleAuthClient(headers);
     user = await _getUserInfo();
+    _logger.debug(
+      () =>
+          'Signed in${user?.email.isNotEmpty == true ? ' as ${user!.email}' : ''}',
+    );
   }
 
   void _doIfSignOut() {
@@ -228,6 +416,7 @@ class GoogleSignInHelper {
     authInfo = null;
     client = null;
     user = null;
+    _logger.debug(() => 'Local sign in state cleared');
   }
 
   Future<GoogleUser?> _getUserInfo() async {

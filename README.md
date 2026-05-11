@@ -13,11 +13,39 @@ Make it easier for you to use google sign in on all platforms.
 
 ``` dart
 final googleSignInHelper = GoogleSignInHelper(
-   currentPlatform: DefaultFirebaseOptions.currentPlatform,
-   
-   // Add desktop id to this if you're using desktop
-   desktopId: null,
+  clientId: 'YOUR_CLIENT_ID',
+  clientSecret: 'YOUR_CLIENT_SECRET',
+  redirectUri: 'YOUR_REDIRECT_URI',
+  debug: true,
+
+  // Optional storage for refresh tokens used by signInSilently()
+   authStorage: MyAuthStorage(),
 );
+```
+
+Set `debug: true` to emit package logs through `lite_logger` while the helper initializes and runs sign-in flows.
+
+On mobile and desktop, `signIn()` and `signInLightweight()` can exchange the
+server auth code for a refresh token and save it through `AuthStorage`. On Web,
+the plugin can still use a stored refresh token for `signInSilently()`, but the
+client-side web flow does not mint a refresh token itself.
+
+`redirectUri` must exactly match the redirect URI configured for the OAuth
+client that is used to exchange the authorization code for refresh tokens.
+
+``` dart
+class MyAuthStorage implements AuthStorage {
+  @override
+  Future<void> save(String token) async {
+    // persist token
+  }
+
+  @override
+  Future<String?> read() async {
+    // load token
+    return null;
+  }
+}
 ```
 
 **Sign in:**

@@ -11,10 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  firebase_core: ^4.2.1
   google_sign_in: ^7.2.0
+  lite_logger: ^0.2.0
   http: ^1.2.2
-  universal_platform: ^1.0.0+1
 
 dev_dependencies:
   flutter_test:

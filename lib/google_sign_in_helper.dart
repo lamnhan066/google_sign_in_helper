@@ -1,5 +1,6 @@
 library;
 
+export 'src/auth_storage.dart';
 export 'src/google_auth_client.dart';
 export 'src/google_sign_in_helper.dart';
 export 'src/google_user.dart';
