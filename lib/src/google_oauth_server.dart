@@ -44,6 +44,16 @@ class AccessTokenCache {
 
   DateTime? get expiresAt => _expiresAt;
 
+  Duration? get remainingLifetime {
+    final expiresAt = _expiresAt;
+    if (_accessToken == null || expiresAt == null) {
+      return null;
+    }
+
+    final remaining = expiresAt.difference(_now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
   bool get hasFreshAccessToken =>
       _accessToken != null &&
       _expiresAt != null &&

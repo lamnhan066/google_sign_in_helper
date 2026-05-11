@@ -207,7 +207,11 @@ class GoogleSignInHelper {
   /// Drive API calls can proceed immediately after awaiting this method.
   Future<bool> signInSilently() async {
     if (_accessTokenCache.hasFreshAccessToken) {
-      _logger.debug(() => 'Silent sign in using cached access token');
+      final remainingLifetime = _accessTokenCache.remainingLifetime;
+      _logger.debug(
+        () =>
+            'Silent sign in using cached access token${remainingLifetime == null ? '' : ' (${remainingLifetime.inSeconds}s remaining)'}',
+      );
       return _applyAccessToken(
         _accessTokenCache.accessToken!,
         skipUserInfoLookup: user != null && client != null,
