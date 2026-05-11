@@ -1,16 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 // import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
 import 'package:google_sign_in_helper/src/sign_in_button.dart';
-import 'package:http/http.dart' as http;
 import 'package:lite_logger/lite_logger.dart';
 
 import 'auth_storage.dart';
 import 'google_auth_client.dart';
+import 'google_oauth_server.dart';
 import 'google_user.dart';
 
 class GoogleSignInScope {
@@ -60,13 +59,13 @@ class GoogleSignInHelper {
   late final LiteLogger _logger;
 
   final String clientId;
-  final String clientSecret;
-  final String redirectUri;
+  final Uri? oauthServerEndpoint;
   final bool debug;
 
   GoogleSignInAccount? _currentAccount;
   late Future<void> _initializeFuture;
   final AuthStorage? authStorage;
+  late final OAuthServer _oauthServer;
 
   /// Get headers from the google sign in
   Map<String, String> headers = {};
@@ -95,8 +94,6 @@ class GoogleSignInHelper {
   /// void main() async {
   ///     final signInHelper = GoogleSignInHelper(
   ///       clientId: 'YOUR_CLIENT_ID',
-  ///       clientSecret: 'YOUR_CLIENT_SECRET',
-  ///       redirectUri: 'YOUR_REDIRECT_URI',
   ///     );
   /// }
   /// ```
@@ -104,11 +101,11 @@ class GoogleSignInHelper {
   /// Default scopes are: profile, email
   GoogleSignInHelper({
     required this.clientId,
-    required this.clientSecret,
-    required this.redirectUri,
+    this.oauthServerEndpoint,
     this.scopes = const [GoogleSignInScope.profile, GoogleSignInScope.email],
     this.authStorage,
     this.debug = false,
+    OAuthServer? oauthServer,
   }) {
     _logger = LiteLogger(
       name: 'GoogleSignInHelper',
@@ -116,6 +113,22 @@ class GoogleSignInHelper {
       minLevel: LogLevel.debug,
       usePrint: kIsWeb,
     );
+
+    if (oauthServer != null) {
+      _oauthServer = oauthServer;
+    } else {
+      final endpoint = oauthServerEndpoint;
+      if (endpoint == null) {
+        throw ArgumentError(
+          'oauthServerEndpoint is required when oauthServer is not provided',
+        );
+      }
+
+      _oauthServer = GoogleOAuthServer(
+        endpoint,
+        log: debug ? (message) => _logger.debug(() => message) : null,
+      );
+    }
 
     googleSignIn = GoogleSignIn.instance;
     _logger.debug(() => 'Initializing Google SignIn Helper');
@@ -181,20 +194,13 @@ class GoogleSignInHelper {
 
   /// Sign in silently using a stored refresh token.
   ///
-  /// Exchanges the stored OAuth2 refresh token for a fresh access token via
-  /// the token endpoint — no UI is shown and no [GoogleSignIn] instance is
-  /// involved. This is the only method that works reliably in background /
-  /// headless contexts (e.g. `background_fetch` when the app is terminated).
-  /// On Web, this only works if a refresh token was already obtained by some
-  /// other means; the client-side web sign-in flow cannot mint one itself.
+  /// Exchanges the stored OAuth2 refresh token through the PHP backend for a
+  /// fresh access token. No Google client secret is shipped in the Flutter
+  /// binary, so the backend owns the secret-bearing token exchange.
   ///
   /// Requirements:
   /// - The user must have signed in at least once via [signIn], which must
   ///   have stored a refresh token via [AuthStorage.save].
-  /// - [clientId] and [clientSecret] from the constructor identify your OAuth2
-  ///   Web client (from Google Cloud Console). In production, prefer routing
-  ///   the refresh through your own backend so [clientSecret] never ships in
-  ///   the binary.
   ///
   /// Returns `true` and populates [headers] / [client] on success so that
   /// Drive API calls can proceed immediately after awaiting this method.
@@ -208,33 +214,25 @@ class GoogleSignInHelper {
     _logger.debug(() => 'Starting silent sign in');
 
     try {
-      final response = await http.post(
-        Uri.parse('https://oauth2.googleapis.com/token'),
-        body: {
-          'refresh_token': refreshToken,
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'grant_type': 'refresh_token',
-        },
+      final response = await _oauthServer.refreshAccessToken(
+        clientId: clientId,
+        refreshToken: refreshToken,
       );
-      if (response.statusCode != 200) {
+      if (response == null) {
         _logger.debug(
-          () =>
-              'Silent sign in failed: token exchange returned ${response.statusCode}',
+          () => 'Silent sign in failed: backend token exchange failed',
         );
         return _check(false, account: null);
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final accessToken = data['access_token'] as String?;
-      if (accessToken == null) {
-        _logger.debug(() => 'Silent sign in failed: access token missing');
-        return _check(false, account: null);
-      }
+      _logger.debug(
+        () =>
+            'Silent sign in received access token${response.refreshToken == null ? '' : ' and refresh token'}',
+      );
 
       // Populate headers and client directly — no GoogleSignInAccount needed.
       headers = {
-        'Authorization': 'Bearer $accessToken',
+        'Authorization': 'Bearer ${response.accessToken}',
         'X-Goog-AuthUser': '0',
       };
       client = GoogleAuthClient(headers);
@@ -283,27 +281,21 @@ class GoogleSignInHelper {
         return;
       }
 
-      final response = await http.post(
-        Uri.parse('https://oauth2.googleapis.com/token'),
-        body: {
-          'code': serverAuthCode,
-          'client_id': clientId,
-          'client_secret': clientSecret,
-          'redirect_uri': redirectUri,
-          'grant_type': 'authorization_code',
-        },
+      final response = await _oauthServer.exchangeAuthorizationCode(
+        clientId: clientId,
+        code: serverAuthCode,
       );
 
-      if (response.statusCode != 200) {
-        _logger.debug(
-          () => 'Refresh token exchange failed: ${response.statusCode}',
-        );
+      if (response == null) {
+        _logger.debug(() => 'Refresh token exchange failed on backend');
         return;
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      _logger.debug(() => 'Refresh token exchange response: $data');
-      final refreshToken = data['refresh_token'] as String?;
+      _logger.debug(
+        () =>
+            'Refresh token exchange completed${response.refreshToken == null ? ' without' : ' with'} refresh token',
+      );
+      final refreshToken = response.refreshToken;
       if (refreshToken == null) {
         _logger.debug(
           () => 'Refresh token exchange completed without a refresh token',
@@ -330,6 +322,11 @@ class GoogleSignInHelper {
     _logger.debug(() => 'Disconnecting Google Sign In');
     await googleSignIn.disconnect();
     await _check(false, account: null);
+  }
+
+  /// Release backend resources owned by this helper.
+  Future<void> dispose() async {
+    await _oauthServer.dispose();
   }
 
   /// Can access scopes

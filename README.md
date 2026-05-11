@@ -14,8 +14,7 @@ Make it easier for you to use google sign in on all platforms.
 ``` dart
 final googleSignInHelper = GoogleSignInHelper(
   clientId: 'YOUR_CLIENT_ID',
-  clientSecret: 'YOUR_CLIENT_SECRET',
-  redirectUri: 'YOUR_REDIRECT_URI',
+  oauthServerEndpoint: Uri.parse('https://your-domain.com/server/index.php'),
   debug: true,
 
   // Optional storage for refresh tokens used by signInSilently()
@@ -25,13 +24,37 @@ final googleSignInHelper = GoogleSignInHelper(
 
 Set `debug: true` to emit package logs through `lite_logger` while the helper initializes and runs sign-in flows.
 
-On mobile and desktop, `signIn()` and `signInLightweight()` can exchange the
-server auth code for a refresh token and save it through `AuthStorage`. On Web,
-the plugin can still use a stored refresh token for `signInSilently()`, but the
-client-side web flow does not mint a refresh token itself.
+Use the same Google OAuth `clientId` in the Flutter app and in the PHP server
+configuration. The server exchanges tokens with Google using that ID and keeps
+the `clientSecret` out of the Flutter binary.
 
-`redirectUri` must exactly match the redirect URI configured for the OAuth
-client that is used to exchange the authorization code for refresh tokens.
+`signIn()` and `signInLightweight()` still use the Google Sign-In SDK for the
+interactive user session, but the long-lived refresh token is now requested
+through the PHP backend at `oauthServerEndpoint`. That keeps the Google client
+secret off the Flutter client.
+
+`signInSilently()` uses the stored refresh token and the same backend endpoint
+to mint a fresh access token without shipping a client secret in the app.
+
+For local development, you can skip the PHP server entirely and use
+`LocalOAuthServer`:
+
+```dart
+final googleSignInHelper = GoogleSignInHelper(
+  clientId: 'YOUR_CLIENT_ID',
+  oauthServer: LocalOAuthServer(
+    clientId: 'YOUR_CLIENT_ID',
+    clientSecret: 'YOUR_CLIENT_SECRET',
+    redirectUri: 'https://your-domain.com/callback',
+  ),
+);
+```
+
+That mode sends the token exchange directly to Google, so it is convenient for
+development but still keeps the secret in the app binary.
+
+See [server/README.md](server/README.md) for the PHP configuration and request
+contract.
 
 ``` dart
 class MyAuthStorage implements AuthStorage {
