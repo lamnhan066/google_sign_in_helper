@@ -2,6 +2,25 @@
 
 Make it easier for you to use google sign in on all platforms.
 
+## How to Get Google OAuth Credentials
+
+To use Google OAuth in your application, create OAuth 2.0 credentials
+(Client ID and Client Secret) in the Google Cloud Console.
+
+1. Go to the Google Cloud Console at https://console.cloud.google.com/apis/credentials and sign in with your Google account.
+2. Set up the OAuth consent screen before creating credentials.
+3. Select your project, or create a new one if you have not already created one for your app.
+4. Open "OAuth consent screen" in the sidebar.
+5. Choose "External" for user type, which is recommended for most cases.
+6. Fill in the required information, including the app name and user support email.
+7. Save and continue until the setup is complete.
+8. Open "Credentials" in the sidebar.
+9. Click "Create Credentials" and then "OAuth client ID".
+10. Choose "Web application" as the application type.
+11. Leave "Authorized JavaScript origins" empty if you do not need it.
+12. Under "Authorized redirect URIs", add your needed urls.
+13. Copy the Client ID and Client Secret after creation and use them in your app configuration.
+
 ## Usage
 
 **Configure the plguin:**
