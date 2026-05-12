@@ -2,11 +2,11 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 
 $config = loadConfig();
+applyCorsHeaders($config);
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -28,6 +28,10 @@ $clientId = configValue($config, 'GOOGLE_CLIENT_ID');
 $clientSecret = configValue($config, 'GOOGLE_CLIENT_SECRET');
 $tokenEndpoint = configValue($config, 'GOOGLE_TOKEN_ENDPOINT') ?: 'https://oauth2.googleapis.com/token';
 $redirectUri = configValue($config, 'GOOGLE_REDIRECT_URI');
+
+if (!isAllowedTokenEndpoint($tokenEndpoint)) {
+    respondError('invalid_token_endpoint', 'GOOGLE_TOKEN_ENDPOINT must point to a Google token endpoint', 500);
+}
 
 if ($clientId === '' || $clientSecret === '') {
     respondError('server_not_configured', 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET', 500);
@@ -108,6 +112,50 @@ function envValue(string $name): string
 {
     $value = getenv($name);
     return $value === false ? '' : trim((string)$value);
+}
+
+function applyCorsHeaders(array $config): void
+{
+    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+    if ($requestOrigin === '') {
+        return;
+    }
+
+    $allowedOrigins = allowedOrigins($config);
+    if (!in_array('*', $allowedOrigins, true) && !in_array($requestOrigin, $allowedOrigins, true)) {
+        return;
+    }
+
+    header('Vary: Origin');
+    header('Access-Control-Allow-Origin: ' . (in_array('*', $allowedOrigins, true) ? '*' : $requestOrigin));
+}
+
+function allowedOrigins(array $config): array
+{
+    $rawOrigins = configValue($config, 'GOOGLE_ALLOWED_ORIGINS');
+    if ($rawOrigins === '') {
+        return [];
+    }
+
+    $origins = array_filter(array_map('trim', explode(',', $rawOrigins)), static fn (string $origin): bool => $origin !== '');
+    return array_values(array_unique($origins));
+}
+
+function isAllowedTokenEndpoint(string $url): bool
+{
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return false;
+    }
+
+    $scheme = strtolower((string)($parts['scheme'] ?? ''));
+    $host = strtolower((string)($parts['host'] ?? ''));
+
+    if ($scheme !== 'https' || $host === '') {
+        return false;
+    }
+
+    return in_array($host, ['oauth2.googleapis.com', 'accounts.google.com', 'www.googleapis.com'], true);
 }
 
 function postForm(string $url, array $payload): array
