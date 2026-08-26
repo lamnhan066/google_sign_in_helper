@@ -31,3 +31,7 @@ build/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+.omo/
+
+# Secrets - DO NOT COMMIT THESE FILES
+/config.php  # Contains real credentials, use config.example.php instead
