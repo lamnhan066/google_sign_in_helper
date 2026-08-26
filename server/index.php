@@ -1,12 +1,11 @@
 <?php
 declare(strict_types=1);
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-
+// Initialize config first - all header logic now consolidated here
 $config = loadConfig();
-applyCorsHeaders($config);
+
+// Consolidate all security headers after config validation but before any output
+applySecurityHeaders($config);
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -72,6 +71,7 @@ if ($response['status'] < 200 || $response['status'] >= 300) {
 http_response_code(200);
 echo $response['body'];
 
+
 function readInput(): array
 {
     $input = $_POST;
@@ -99,6 +99,56 @@ function loadConfig(): array
     return [];
 }
 
+/**
+ * Consolidate all security headers after config validation.
+ * This ensures COOP/COEP headers are applied safely and CSP is present.
+ */
+function applySecurityHeaders(array $config): void
+{
+    // Apply COOP/COEP headers (always needed for modern web security)
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Cross-Origin-Embedder-Policy: require-corp');
+    header('Cross-Origin-Opener-Policy-Report-Only: same-origin');
+    header('Cross-Origin-Embedder-Policy-Report-Only: require-corp');
+
+    // Add Content-Security-Policy for defense in depth
+    header('Content-Security-Policy: default-src \'self\'; script-src \'none\'');
+
+    // CORS logic - only apply to browser requests with Origin header
+    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+    
+    if ($requestOrigin !== '') {
+        $allowedOrigins = allowedOrigins($config);
+        
+        // Check if origin is in allowlist or wildcard is configured
+        if (!in_array('*', $allowedOrigins, true) && !in_array($requestOrigin, $allowedOrigins, true)) {
+            // Origin not allowed - don't send CORS headers (browser will block)
+            return;
+        }
+
+        header('Vary: Origin');
+        header('Access-Control-Allow-Origin: ' . (in_array('*', $allowedOrigins, true) ? '*' : $requestOrigin));
+        
+        // Add max-age to cache preflight responses (performance optimization)
+        header('Access-Control-Max-Age: 86400');
+    }
+
+    // Always allow POST methods and required headers
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Origin');
+}
+
+function allowedOrigins(array $config): array
+{
+    $rawOrigins = configValue($config, 'GOOGLE_ALLOWED_ORIGINS');
+    if ($rawOrigins === '') {
+        return [];
+    }
+
+    $origins = array_filter(array_map('trim', explode(',', $rawOrigins)), static fn (string $origin): bool => $origin !== '');
+    return array_values(array_unique($origins));
+}
+
 function configValue(array $config, string $name): string
 {
     if (array_key_exists($name, $config)) {
@@ -112,33 +162,6 @@ function envValue(string $name): string
 {
     $value = getenv($name);
     return $value === false ? '' : trim((string)$value);
-}
-
-function applyCorsHeaders(array $config): void
-{
-    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
-    if ($requestOrigin === '') {
-        return;
-    }
-
-    $allowedOrigins = allowedOrigins($config);
-    if (!in_array('*', $allowedOrigins, true) && !in_array($requestOrigin, $allowedOrigins, true)) {
-        return;
-    }
-
-    header('Vary: Origin');
-    header('Access-Control-Allow-Origin: ' . (in_array('*', $allowedOrigins, true) ? '*' : $requestOrigin));
-}
-
-function allowedOrigins(array $config): array
-{
-    $rawOrigins = configValue($config, 'GOOGLE_ALLOWED_ORIGINS');
-    if ($rawOrigins === '') {
-        return [];
-    }
-
-    $origins = array_filter(array_map('trim', explode(',', $rawOrigins)), static fn (string $origin): bool => $origin !== '');
-    return array_values(array_unique($origins));
 }
 
 function isAllowedTokenEndpoint(string $url): bool
@@ -160,13 +183,16 @@ function isAllowedTokenEndpoint(string $url): bool
 
 function postForm(string $url, array $payload): array
 {
+    // Remove hardcoded timeout and make it configurable via env var if needed
+    $timeout = getenv('GOOGLE_API_TIMEOUT') ?: 30;
+    
     $context = stream_context_create([
         'http' => [
             'method' => 'POST',
             'header' => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
             'content' => http_build_query($payload),
             'ignore_errors' => true,
-            'timeout' => 20,
+            'timeout' => (float)$timeout,
         ],
     ]);
 

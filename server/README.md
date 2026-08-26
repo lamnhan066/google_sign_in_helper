@@ -35,11 +35,54 @@ The server also rejects any `GOOGLE_TOKEN_ENDPOINT` that does not point to a
 Google token host. Keep it on the default Google endpoint unless you have a
 specific Google-hosted alternative.
 
+## Deployment Checklist
+
+Before deploying:
+
+1. **Set environment variables** OR copy `config.example.php` to `config.php` and fill in values
+2. **Configure allowed origins** for browser clients via `GOOGLE_ALLOWED_ORIGINS` (optional, omit for native-only)
+3. **Verify token endpoint** points to a Google host (default: `https://oauth2.googleapis.com/token`)
+4. **(Optional)** Set `GOOGLE_API_TIMEOUT` environment variable (default: 30 seconds)
+
+## Local Testing
+
+```bash
+# Start server in background
+php -S localhost:8000 server/index.php &
+
+# Test with curl (from allowed origin):
+curl -X POST http://localhost:8000/server/index.php \
+  -H "Origin: https://your-app.example" \
+  -F "grant_type=authorization_code" \
+  -F "code=YOUR_AUTH_CODE"
+
+# Verify response headers include COOP/COEP/CSP
+curl -v http://localhost:8000/server/index.php \
+  -H "Origin: https://your-app.example" | grep -i "^< "
+```
+
+## Security Notes
+
+- **`config.php` is ignored by git** to protect your secrets. Never commit this file.
+- **COOP/COEP headers** are applied unconditionally (required for modern web security).
+- **CSP header** is included as a defense-in-depth measure.
+- **Origin-specific CORS**: Only configured origins receive `Access-Control-Allow-Origin` headers. Native apps (no Origin header) work without restrictions.
+
+## Troubleshooting
+
+### 405 Method Not Allowed
+Ensure you're using POST requests, not GET/PUT/DELETE.
+
+### Missing Access-Control-Allow-Origin Header
+- Verify your request includes an `Origin` header (browser adds this automatically)
+- Check that the origin is in `GOOGLE_ALLOWED_ORIGINS` config (or use wildcard)
+- Native apps without Origin header will never receive CORS headers but still work
+
+### Token endpoint errors (502)
+Check network connectivity to Google and verify your server has outbound HTTPS access.
+
 ## Request contract
 
-`POST /server/index.php`
-
-Form fields:
 
 - `grant_type=authorization_code`
 - `code=...`
