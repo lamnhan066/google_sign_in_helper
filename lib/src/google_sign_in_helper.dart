@@ -140,7 +140,34 @@ class GoogleSignInHelper {
         )
         .whenComplete(() {
           _logger.debug(() => 'Google Sign In initialized');
+        })
+        .then((_) {
+          googleSignIn.authenticationEvents
+              .listen(_handleAuthenticationEvent)
+              .onError(_handleAuthenticationError);
         });
+  }
+
+  Future<void> _handleAuthenticationEvent(
+    GoogleSignInAuthenticationEvent event,
+  ) async {
+    // Only check on web (for the sign in button)
+    if (kIsWeb) {
+      _logger.debug(() => 'Handle authentication events on the Web');
+      final GoogleSignInAccount? account = switch (event) {
+        GoogleSignInAuthenticationEventSignIn() => event.user,
+        GoogleSignInAuthenticationEventSignOut() => null,
+      };
+
+      await _checkAndStoreToken(account);
+    }
+  }
+
+  Future<void> _handleAuthenticationError(Object e) async {
+    if (kIsWeb) {
+      _logger.debug(() => 'Handle authentication error on the Web');
+      await _clearRefreshToken();
+    }
   }
 
   /// Render a sign in button.
@@ -164,9 +191,23 @@ class GoogleSignInHelper {
     } catch (_) {}
 
     final account = await googleSignIn.authenticate(scopeHint: scopes);
-    final isSignedIn = await _check(true, account: account);
-    await _storeRefreshToken(account);
+    final isSignedIn = await _checkAndStoreToken(account);
     _logger.debug(() => 'Interactive sign in completed: $isSignedIn');
+    return isSignedIn;
+  }
+
+  Future<bool> _checkAndStoreToken(GoogleSignInAccount? account) async {
+    if (account == null) {
+      await _clearRefreshToken();
+      return false;
+    }
+
+    final isSignedIn = await _check(true, account: account);
+    if (isSignedIn) {
+      await _storeRefreshToken(account);
+    } else {
+      await _clearRefreshToken();
+    }
     return isSignedIn;
   }
 
@@ -261,11 +302,6 @@ class GoogleSignInHelper {
       return;
     }
 
-    if (kIsWeb) {
-      _logger.debug(() => 'Skipping refresh token storage on web');
-      return;
-    }
-
     try {
       final serverAuth = await account.authorizationClient.authorizeServer(
         scopes,
@@ -307,12 +343,17 @@ class GoogleSignInHelper {
     } catch (_) {}
   }
 
+  Future<void> _clearRefreshToken() async {
+    await authStorage?.clear();
+  }
+
   /// Sign out.
   Future<void> signOut() async {
     await _initializeFuture;
     _logger.debug(() => 'Signing out');
     await googleSignIn.signOut();
     await _check(false, account: null);
+    await _clearRefreshToken();
   }
 
   /// Disconnect.
@@ -321,6 +362,7 @@ class GoogleSignInHelper {
     _logger.debug(() => 'Disconnecting Google Sign In');
     await googleSignIn.disconnect();
     await _check(false, account: null);
+    await _clearRefreshToken();
   }
 
   /// Release backend resources owned by this helper.
