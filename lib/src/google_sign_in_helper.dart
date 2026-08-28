@@ -66,6 +66,7 @@ class GoogleSignInHelper {
   late Future<void> _initializeFuture;
   final AuthStorage? authStorage;
   late final OAuthServer _oauthServer;
+  late StreamSubscription? _authEventSubscription;
   final AccessTokenCache _accessTokenCache = AccessTokenCache();
 
   /// Get headers from the google sign in
@@ -81,6 +82,9 @@ class GoogleSignInHelper {
   GoogleAuthClient? client;
 
   final List<String> scopes;
+
+  /// Volatile flag for tracking pending auth operations (concurrency guard)
+  bool _authInProgress = false;
 
   /// Change when user sign in or sign out
   Stream<bool> get onSignChanged => _onSignedChangeController.stream;
@@ -132,19 +136,19 @@ class GoogleSignInHelper {
     }
 
     googleSignIn = GoogleSignIn.instance;
-    _logger.debug(() => 'Initializing Google SignIn Helper');
     _initializeFuture = googleSignIn
         .initialize(
           clientId: kIsWeb ? clientId : null,
           serverClientId: kIsWeb ? null : clientId,
         )
         .whenComplete(() {
-          _logger.debug(() => 'Google Sign In initialized');
+          _logger.debug(() => 'Google Sign In initialized and ready');
         })
         .then((_) {
-          googleSignIn.authenticationEvents
-              .listen(_handleAuthenticationEvent)
-              .onError(_handleAuthenticationError);
+          _authEventSubscription = googleSignIn.authenticationEvents.listen(
+            _handleAuthenticationEvent,
+            onError: _handleAuthenticationError,
+          );
         });
   }
 
@@ -181,19 +185,40 @@ class GoogleSignInHelper {
     await _initializeFuture;
     _logger.debug(() => 'Starting interactive sign in');
 
-    if (!googleSignIn.supportsAuthenticate()) {
-      _logger.debug(() => 'Interactive sign in not supported on this platform');
-      return _check(false, account: null);
+    // Guard against concurrent auth operations
+    if (_authInProgress) {
+      _logger.debug(
+        () => 'Skipping sign in: auth operation already in progress',
+      );
+      return false;
     }
+    _authInProgress = true;
 
     try {
-      await googleSignIn.signOut();
-    } catch (_) {}
+      if (!googleSignIn.supportsAuthenticate()) {
+        _logger.debug(
+          () => 'Interactive sign in not supported on this platform',
+        );
+        final result = await _check(false, account: null);
+        _authInProgress = false;
+        return result;
+      }
 
-    final account = await googleSignIn.authenticate(scopeHint: scopes);
-    final isSignedIn = await _checkAndStoreToken(account);
-    _logger.debug(() => 'Interactive sign in completed: $isSignedIn');
-    return isSignedIn;
+      try {
+        await googleSignIn.signOut();
+      } catch (e) {
+        _logger.debug(() => 'Error in signIn signOut cleanup: $e');
+      }
+
+      final account = await googleSignIn.authenticate(scopeHint: scopes);
+
+      final result = await _checkAndStoreToken(account);
+      _logger.debug(() => 'Interactive sign in completed: $result');
+      return result;
+    } finally {
+      // Cleanup flag regardless of outcome
+      _authInProgress = false;
+    }
   }
 
   Future<bool> _checkAndStoreToken(GoogleSignInAccount? account) async {
@@ -221,17 +246,32 @@ class GoogleSignInHelper {
     await _initializeFuture;
     _logger.debug(() => 'Starting lightweight sign in');
 
-    final Future<GoogleSignInAccount?>? attempt = googleSignIn
-        .attemptLightweightAuthentication();
-    if (attempt == null) {
-      _logger.debug(() => 'Lightweight sign in not supported on this platform');
-      return _check(false, account: null);
+    // Guard against concurrent auth operations
+    if (_authInProgress) {
+      _logger.debug(
+        () =>
+            'Skipping lightweight sign in: auth operation already in progress',
+      );
+      return false;
     }
+    _authInProgress = true;
 
-    final account = await attempt;
-    final isSignedIn = await _check(account != null, account: account);
-    _logger.debug(() => 'Lightweight sign in completed: $isSignedIn');
-    return isSignedIn;
+    try {
+      final Future<GoogleSignInAccount?>? attempt = googleSignIn
+          .attemptLightweightAuthentication();
+      if (attempt == null) {
+        _logger.debug(
+          () => 'Lightweight sign in not supported on this platform',
+        );
+        return await _check(false, account: null);
+      }
+
+      final account = await attempt;
+      return await _check(account != null, account: account);
+    } finally {
+      // Cleanup flag regardless of outcome
+      _authInProgress = false;
+    }
   }
 
   /// Sign in silently using a stored refresh token.
@@ -247,13 +287,21 @@ class GoogleSignInHelper {
   /// Returns `true` and populates [headers] / [client] on success so that
   /// Drive API calls can proceed immediately after awaiting this method.
   Future<bool> signInSilently() async {
+    // Guard against concurrent auth operations during token refresh flow
+    if (_authInProgress) {
+      _logger.debug(
+        () => 'Skipping silent sign in: auth operation already in progress',
+      );
+      return false;
+    }
+
     if (_accessTokenCache.hasFreshAccessToken) {
       final remainingLifetime = _accessTokenCache.remainingLifetime;
       _logger.debug(
         () =>
             'Silent sign in using cached access token${remainingLifetime == null ? '' : ' (${remainingLifetime.inSeconds}s remaining)'}',
       );
-      return _applyAccessToken(
+      return await _applyAccessToken(
         _accessTokenCache.accessToken!,
         skipUserInfoLookup: user != null && client != null,
       );
@@ -262,10 +310,11 @@ class GoogleSignInHelper {
     final refreshToken = await authStorage?.read();
     if (refreshToken == null) {
       _logger.debug(() => 'Silent sign in skipped: no refresh token available');
-      return _check(false, account: null);
+      return await _check(false, account: null);
     }
 
     _logger.debug(() => 'Starting silent sign in');
+    _authInProgress = true;
 
     try {
       final response = await _oauthServer.refreshAccessToken(
@@ -276,7 +325,7 @@ class GoogleSignInHelper {
         _logger.debug(
           () => 'Silent sign in failed: backend token exchange failed',
         );
-        return _check(false, account: null);
+        return await _check(false, account: null);
       }
 
       _logger.debug(
@@ -286,10 +335,13 @@ class GoogleSignInHelper {
 
       _accessTokenCache.store(response);
 
-      return _applyAccessToken(response.accessToken);
+      return await _applyAccessToken(response.accessToken);
     } catch (_) {
       _logger.debug(() => 'Silent sign in failed with an exception');
-      return _check(false, account: null);
+      return await _check(false, account: null);
+    } finally {
+      // Cleanup flag after token refresh attempt
+      _authInProgress = false;
     }
   }
 
@@ -340,7 +392,9 @@ class GoogleSignInHelper {
 
       await storage.save(refreshToken);
       _logger.debug(() => 'Refresh token saved');
-    } catch (_) {}
+    } catch (e) {
+      _logger.debug(() => 'Error storing refresh token: $e');
+    }
   }
 
   Future<void> _clearRefreshToken() async {
@@ -351,9 +405,20 @@ class GoogleSignInHelper {
   Future<void> signOut() async {
     await _initializeFuture;
     _logger.debug(() => 'Signing out');
-    await googleSignIn.signOut();
-    await _check(false, account: null);
-    await _clearRefreshToken();
+
+    // Cancel any pending auth operation during sign-out
+    if (_authInProgress) {
+      _logger.debug(() => 'Aborting in-flight auth operation due to sign-out');
+    }
+
+    try {
+      await googleSignIn.signOut();
+      await _check(false, account: null);
+      await _clearRefreshToken();
+    } finally {
+      // Ensure flag is cleared even if sign-out fails partway through
+      _authInProgress = false;
+    }
   }
 
   /// Disconnect.
@@ -367,6 +432,8 @@ class GoogleSignInHelper {
 
   /// Release backend resources owned by this helper.
   Future<void> dispose() async {
+    _logger.debug(() => 'Disposing Google Sign In Helper');
+    _authEventSubscription?.cancel();
     await _oauthServer.dispose();
   }
 
